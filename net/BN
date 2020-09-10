@@ -1,0 +1,64 @@
+# Batch Normalization批归一化
+    # ((x-mean)/var)*gamma+beta
+def _batch_norm(self, name, x):
+    with tf.variable_scope(name):
+        # 输入通道维数
+        params_shape = [x.get_shape()[-1]]
+        # offset
+        beta = tf.get_variable('beta',
+                               params_shape,
+                               tf.float32,
+                               initializer=tf.constant_initializer(0.0,
+                                                                   tf.float32))
+        # scale
+        gamma = tf.get_variable('gamma',
+                                params_shape,
+                                tf.float32,
+                                initializer=tf.constant_initializer(1.0,
+                                                                    tf.float32))
+
+        if self.mode == 'train':
+            # 为每个通道计算均值、标准差
+            mean, variance = tf.nn.moments(x, [0, 1, 2], name='moments')
+            # 新建或建立测试阶段使用的batch均值、标准差
+            moving_mean = tf.get_variable('moving_mean',
+                                          params_shape, tf.float32,
+                                          initializer=tf.constant_initializer(
+                                              0.0, tf.float32),
+                                          trainable=False)
+            moving_variance = tf.get_variable('moving_variance',
+                                              params_shape, tf.float32,
+                                              initializer=tf.constant_initializer(
+                                                  1.0, tf.float32),
+                                              trainable=False)
+            # 添加batch均值和标准差的更新操作(滑动平均)
+            # moving_mean = moving_mean * decay + mean * (1 - decay)
+            # moving_variance = moving_variance * decay + variance * (1 - decay)
+            # _extra_train_ops = []使用来存储值的
+            self._extra_train_ops.append(
+                moving_averages.assign_moving_average(
+                    moving_mean, mean, 0.9))
+            self._extra_train_ops.append(
+                moving_averages.assign_moving_average(
+                    moving_variance, variance, 0.9))
+        else:
+            # 获取训练中积累的batch均值、标准差
+            mean = tf.get_variable('moving_mean',
+                                   params_shape, tf.float32,
+                                   initializer=tf.constant_initializer(0.0,
+                                                                       tf.float32),
+                                   trainable=False)
+            variance = tf.get_variable('moving_variance',
+                                       params_shape, tf.float32,
+                                       initializer=tf.constant_initializer(
+                                           1.0, tf.float32),
+                                       trainable=False)
+            # 添加到直方图总结
+            tf.summary.histogram(mean.op.name, mean)
+            tf.summary.histogram(variance.op.name, variance)
+
+        # BN层：((x-mean)/var)*gamma+beta
+        y = tf.nn.batch_normalization(x, mean, variance, beta, gamma, 0.001)
+        y.set_shape(x.get_shape())
+        return y
+
